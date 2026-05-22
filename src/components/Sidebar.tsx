@@ -71,9 +71,9 @@ interface StatsBarProps {
 export const StatsBar: React.FC<StatsBarProps> = ({ articles }) => {
   const stats: StatItem[] = [
     { label: "Stories Today", value: articles.length,                          color: DS.cyan   },
-    { label: "Trending Now",  value: articles.filter((a) => a.trending).length, color: DS.amber  },
-    { label: "Breaking",      value: articles.filter((a) => a.breaking).length, color: DS.red    },
-    { label: "Sources",       value: new Set(articles.map((a) => a.source)).size, color: DS.violet },
+    { label: "Trending Now",  value: articles.filter((a: Article) => a.trending).length, color: DS.amber  },
+    { label: "Breaking",      value: articles.filter((a: Article) => a.breaking).length, color: DS.red    },
+    { label: "Sources",       value: new Set(articles.map((a: Article) => a.source)).size, color: DS.violet },
   ];
 
   return (
@@ -105,7 +105,7 @@ export const CategoryBreakdown: React.FC<CategoryBreakdownProps> = ({ articles }
     {(Object.entries(CAT_META) as [string, { color: string; emoji: string }][])
       .slice(0, 7)
       .map(([cat, meta]) => {
-        const count = articles.filter((a) => a.category === cat).length;
+        const count = articles.filter((a: Article) => a.category === cat).length;
         const pct   = articles.length > 0 ? Math.round((count / articles.length) * 100) : 0;
         return (
           <div key={cat} style={{ marginBottom: 11 }}>

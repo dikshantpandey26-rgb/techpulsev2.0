@@ -1,0 +1,96 @@
+/* =============================================================================
+   src/styles/global.css — Global styles, CSS custom properties, animations
+   Supports dark/light theme via [data-theme] attribute on <html>.
+   ============================================================================= */
+
+   @import url('https://fonts.googleapis.com/css2?family=Fraunces:wght@700;800;900&family=IBM+Plex+Mono:wght@400;600;700&display=swap');
+   @import url('https://api.fontshare.com/v2/css?f[]=cabinet-grotesk@400,500,600,700,800&display=swap');
+   
+   /* ── CSS Variables — Dark theme (default) ─────────────────────────────────── */
+   :root, [data-theme="dark"] {
+     --bg0:    #09090e;
+     --bg1:    #0f0f18;
+     --bg2:    #16161f;
+     --bg3:    #1e1e2a;
+     --bg4:    #252535;
+     --line:   rgba(255,255,255,0.07);
+     --line2:  rgba(255,255,255,0.12);
+     --text0:  #f5f0e8;
+     --text1:  #bfbba8;
+     --text2:  #7a7669;
+     --amber:  #f5a623;
+     --amberd: #c4831a;
+     --coral:  #ff5c4d;
+     --cyan:   #00d4c8;
+     --violet: #9b7fe8;
+     --green:  #2dbe8c;
+     --red:    #e84040;
+   }
+   
+   /* ── CSS Variables — Light theme ─────────────────────────────────────────── */
+   [data-theme="light"] {
+     --bg0:    #f8f7f4;
+     --bg1:    #ffffff;
+     --bg2:    #f0ede8;
+     --bg3:    #e8e4de;
+     --bg4:    #ddd8d0;
+     --line:   rgba(0,0,0,0.07);
+     --line2:  rgba(0,0,0,0.12);
+     --text0:  #1a1814;
+     --text1:  #3d3a32;
+     --text2:  #706d63;
+   }
+   
+   /* ── Reset ────────────────────────────────────────────────────────────────── */
+   *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+   html { scroll-behavior: smooth; font-size: 16px; }
+   body {
+     background: var(--bg0);
+     color: var(--text0);
+     -webkit-font-smoothing: antialiased;
+     -moz-osx-font-smoothing: grayscale;
+     transition: background 0.3s, color 0.3s;
+   }
+   
+   /* ── Scrollbar ────────────────────────────────────────────────────────────── */
+   ::-webkit-scrollbar       { width: 4px; }
+   ::-webkit-scrollbar-track { background: transparent; }
+   ::-webkit-scrollbar-thumb { background: var(--bg4); border-radius: 2px; }
+   
+   /* ── Animations ───────────────────────────────────────────────────────────── */
+   @keyframes shimmer    { 0%,100%{ opacity:.3 } 50%{ opacity:.7 } }
+   @keyframes pulse      { 0%,100%{ opacity:1  } 50%{ opacity:.5 } }
+   @keyframes slideUp    { from{ transform:translateY(30px); opacity:0 } to{ transform:translateY(0); opacity:1 } }
+   @keyframes slideDown  { from{ transform:translateY(-10px); opacity:0 } to{ transform:translateY(0); opacity:1 } }
+   @keyframes fadeIn     { from{ opacity:0 } to{ opacity:1 } }
+   @keyframes spin       { to{ transform:rotate(360deg) } }
+   @keyframes glow       { 0%,100%{ box-shadow:0 0 20px rgba(0,212,200,.3) } 50%{ box-shadow:0 0 40px rgba(0,212,200,.7) } }
+   
+   /* ── Utility classes ──────────────────────────────────────────────────────── */
+   .hide-scrollbar::-webkit-scrollbar { display: none; }
+   .hide-scrollbar                    { scrollbar-width: none; }
+   
+   .sr-only {
+     position: absolute; width: 1px; height: 1px;
+     padding: 0; margin: -1px; overflow: hidden;
+     clip: rect(0,0,0,0); white-space: nowrap; border-width: 0;
+   }
+   
+   .focus-ring:focus-visible {
+     outline: 2px solid var(--cyan);
+     outline-offset: 2px;
+     border-radius: 4px;
+   }
+   
+   /* ── Typography helpers ───────────────────────────────────────────────────── */
+   .font-display { font-family: 'Fraunces', serif; }
+   .font-ui      { font-family: 'Cabinet Grotesk', sans-serif; }
+   .font-mono    { font-family: 'IBM Plex Mono', monospace; }
+   
+   /* ── Performance: reduce motion ───────────────────────────────────────────── */
+   @media (prefers-reduced-motion: reduce) {
+     *, *::before, *::after {
+       animation-duration: 0.01ms !important;
+       transition-duration: 0.01ms !important;
+     }
+   }

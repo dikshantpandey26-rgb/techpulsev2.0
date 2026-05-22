@@ -108,10 +108,10 @@ export const ArticleModal: React.FC<ArticleModalProps> = ({ article, onClose, al
 
   const related = allArticles
     .filter(
-      (a) =>
+      (a: Article) =>
         a.id !== article.id &&
         (a.category === article.category ||
-          a.tags.some((t) => article.tags.includes(t)))
+          a.tags.some((t: string) => article.tags.includes(t)))
     )
     .slice(0, 3);
 

@@ -136,7 +136,7 @@ export const DailyDigest: React.FC<DailyDigestProps> = ({ articles }) => {
     try {
       const headlines = articles
         .slice(0, 8)
-        .map((a) => `- ${a.title} (${a.source})`)
+        .map((a: Article) => `- ${a.title} (${a.source})`)
         .join("\n");
 
       const r = await callClaude(
