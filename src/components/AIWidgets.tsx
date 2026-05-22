@@ -50,8 +50,13 @@ export const AISearchBar: React.FC<AISearchBarProps> = ({ onResults, onClear }) 
   
     } catch (err) {
       console.error("AI Search Error:", err);
-  
-      setInsight("AI context unavailable. Showing filtered results.");
+    
+      if (err instanceof Error) {
+        setInsight(`AI Error: ${err.message}`);
+      } else {
+        setInsight("AI context unavailable.");
+      }
+    
       onResults(query);
     }
   
