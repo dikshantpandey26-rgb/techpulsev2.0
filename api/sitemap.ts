@@ -3,7 +3,7 @@
 // Fetches latest articles from Supabase and outputs valid sitemap XML.
 // Submit to Google Search Console: https://yourdomain.com/api/sitemap
 // =============================================================================
-import type { Article } from "../src/types/index";
+import type { ArticleRow } from "../src/types/index";
 export const config = { runtime: "edge" };
 
 const STATIC_PAGES = [
@@ -41,7 +41,7 @@ export default async function handler(request: Request): Promise<Response> {
     <changefreq>${p.changefreq}</changefreq>
     <priority>${p.priority}</priority>
   </url>`),
-    ...articles.map((a: Article) => `
+    ...articles.map((a: ArticleRow) => `
   <url>
     <loc>${origin}/article/${a.slug}</loc>
     <lastmod>${new Date(a.updated_at).toISOString().split("T")[0]}</lastmod>
