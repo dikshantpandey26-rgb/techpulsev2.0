@@ -4,7 +4,7 @@
 
 import React, { useState, useRef } from "react";
 import { DS } from "../data/designSystem";
-import { callClaude } from "../utils/claude";
+//import { callClaude } from "../utils/claude";
 import { useTypewriter, useVisible } from "../hooks";
 import type { Article } from "../types";
 
@@ -22,20 +22,39 @@ export const AISearchBar: React.FC<AISearchBarProps> = ({ onResults, onClear }) 
 
   const handleSearch = async (): Promise<void> => {
     if (!query.trim()) return;
+  
     setLoading(true);
     setInsight("");
+  
     try {
-      const r = await callClaude(
-        [{ role: "user", content: `Tech topic: "${query}"\nProvide: 1) 2-sentence expert context 2) 3 key recent developments to watch 3) One contrarian take. Be sharp.` }],
-        "You are a senior tech journalist with 20 years experience. Be specific, direct, insightful. No fluff.",
-        500
-      );
-      setInsight(r);
+      const response = await fetch("/api/ai", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          mode: "search",
+          query,
+        }),
+      });
+  
+      if (!response.ok) {
+        const err = await response.text();
+        throw new Error(err);
+      }
+  
+      const data = await response.json();
+  
+      setInsight(data.result || "No AI response available.");
       onResults(query);
-    } catch {
+  
+    } catch (err) {
+      console.error("AI Search Error:", err);
+  
       setInsight("AI context unavailable. Showing filtered results.");
       onResults(query);
     }
+  
     setLoading(false);
   };
 
@@ -133,21 +152,36 @@ export const DailyDigest: React.FC<DailyDigestProps> = ({ articles }) => {
   const generate = async (): Promise<void> => {
     setLoading(true);
     setDigest("");
+  
     try {
       const headlines = articles
         .slice(0, 8)
-        .map((a: Article) => `- ${a.title} (${a.source})`)
-        .join("\n");
-
-      const r = await callClaude(
-        [{ role: "user", content: `Today's top tech stories:\n${headlines}\n\nWrite a punchy 5-sentence executive digest. Start with the biggest story, connect the themes, end with the key takeaway. Tone: sharp Bloomberg morning brief.` }],
-        "You are a world-class tech journalist writing an executive morning brief. Be sharp, insightful, and connect dots between stories.",
-        500
-      );
-      setDigest(r);
-    } catch {
+        .map((a: Article) => a.title);
+  
+      const response = await fetch("/api/ai", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          mode: "digest",
+          headlines,
+        }),
+      });
+  
+      if (!response.ok) {
+        const err = await response.text();
+        throw new Error(err);
+      }
+  
+      const data = await response.json();
+  
+      setDigest(data.result || "Digest unavailable.");
+    } catch (err) {
+      console.error("Digest Error:", err);
       setDigest("AI digest unavailable. Top stories are displayed below.");
     }
+  
     setLoading(false);
   };
 
