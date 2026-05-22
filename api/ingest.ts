@@ -110,7 +110,7 @@ function normalizeArticle(raw: RawArticle, id: number): DbArticle {
 
 function deduplicate(articles: DbArticle[], existingUrls: Set<string>): DbArticle[] {
   const seen = new Set<string>();
-  return articles.filter((a: Article) => {
+  return articles.filter((a: DbArticle) => {
     if (existingUrls.has(a.original_url)) return false;
     if (seen.has(a.original_url)) return false;
     seen.add(a.original_url);

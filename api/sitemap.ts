@@ -3,7 +3,7 @@
 // Fetches latest articles from Supabase and outputs valid sitemap XML.
 // Submit to Google Search Console: https://yourdomain.com/api/sitemap
 // =============================================================================
-import type { ArticleRow } from "../src/types/index";
+import type { Article } from "../src/types/index";
 export const config = { runtime: "edge" };
 
 const STATIC_PAGES = [
