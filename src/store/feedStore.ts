@@ -51,7 +51,7 @@ export const useFeedStore = create<FeedState>()(
       // Articles
       articles:    [],
       loading:     true,
-      setArticles: (articles: Article[]) => set({ articles }),
+      setArticles: (articles) => set({ articles }),
       setLoading:  (loading)  => set({ loading }),
 
       // Modal
@@ -61,7 +61,7 @@ export const useFeedStore = create<FeedState>()(
       // Filters
       filters: { category: "All", searchQuery: "", page: 1 },
 
-      setCategory: (category: string) =>
+      setCategory: (category) =>
         set((s) => ({ filters: { ...s.filters, category, page: 1 } })),
 
       setSearchQuery: (searchQuery) =>
@@ -80,17 +80,17 @@ export const useFeedStore = create<FeedState>()(
 
       // Bookmarks
       bookmarks:      [],
-      toggleBookmark: (id: number) =>
+      toggleBookmark: (id) =>
         set((s) => ({
           bookmarks: s.bookmarks.includes(id)
             ? s.bookmarks.filter((b) => b !== id)
             : [...s.bookmarks, id],
         })),
-      isBookmarked: (id: number) => get().bookmarks.includes(id),
+      isBookmarked: (id) => get().bookmarks.includes(id),
 
       // History
       readHistory: [],
-      markRead:    (id: number) =>
+      markRead:    (id) =>
         set((s) => ({
           readHistory: s.readHistory.includes(id)
             ? s.readHistory
@@ -118,15 +118,15 @@ export function useFilteredArticles(): Article[] {
 
   let list = articles;
   if (category !== "All") {
-    list = list.filter((a: Article) => a.category === category);
+    list = list.filter((a) => a.category === category);
   }
   if (searchQuery) {
     const q = searchQuery.toLowerCase();
     list = list.filter(
-      (a: Article) =>
+      (a) =>
         a.title.toLowerCase().includes(q) ||
         a.category.toLowerCase().includes(q) ||
-        a.tags.some((t: string) => t.toLowerCase().includes(q)) ||
+        a.tags.some((t) => t.toLowerCase().includes(q)) ||
         a.source.toLowerCase().includes(q)
     );
   }

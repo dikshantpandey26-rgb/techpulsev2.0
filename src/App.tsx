@@ -57,16 +57,16 @@ export default function App(): React.ReactElement {
     let list = articles;
 
     if (activeCategory !== "All") {
-      list = list.filter((a: Article) => a.category === activeCategory);
+      list = list.filter((a) => a.category === activeCategory);
     }
 
     if (searchQuery) {
       const q = searchQuery.toLowerCase();
       list = list.filter(
-        (a: Article) =>
+        (a) =>
           a.title.toLowerCase().includes(q) ||
           a.category.toLowerCase().includes(q) ||
-          a.tags.some((t: string) => t.toLowerCase().includes(q)) ||
+          a.tags.some((t) => t.toLowerCase().includes(q)) ||
           a.source.toLowerCase().includes(q)
       );
     }
@@ -105,8 +105,8 @@ export default function App(): React.ReactElement {
     setPage(1);
   };
 
-  const trendingArticles = articles.filter((a: Article) => a.trending || a.hype > 85);
-  const breakingArticles = articles.filter((a: Article) => a.breaking || a.trending);
+  const trendingArticles = articles.filter((a) => a.trending || a.hype > 85);
+  const breakingArticles = articles.filter((a) => a.breaking || a.trending);
   const showHomeSections = !searchQuery && activeCategory === "All";
 
   return (

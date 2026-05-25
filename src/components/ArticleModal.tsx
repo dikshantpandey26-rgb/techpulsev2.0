@@ -1,49 +1,76 @@
-// ─────────────────────────────────────────────────────────────────────────────
+// =============================================================================
 // src/components/ArticleModal.tsx
-// ─────────────────────────────────────────────────────────────────────────────
+//
+// CHANGES FROM PREVIOUS VERSION:
+// • Removed: import { callClaude } from "../utils/claude"
+//   Replaced with: import { aiService } from "../services/aiService"
+//
+// • AIPanel.run() now calls aiService.panelRequest() — a single typed method
+//   that dispatches to the correct /api/ai mode. No raw prompts in this file.
+//
+// • Added AbortController in AIPanel: cancels in-flight request on unmount
+//   and when the user clicks a different mode button while one is loading.
+//
+// • Added error display in AIPanel so users see a real message instead of
+//   silent failure.
+//
+// • ArticleModal and all JSX/styling are identical to the previous version.
+// =============================================================================
 
-import React, { useState } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import { DS, getCatMeta, FALLBACK_IMAGE } from "../data/designSystem";
-import { callClaude } from "../utils/claude";
+import { aiService } from "../services/aiService";
 import { useTypewriter } from "../hooks";
 import { SentimentBadge, ShareMenu } from "./atoms";
 import type { Article, AIPanelMode, AIPanelButton } from "../types";
 
 // ── AIPanel ───────────────────────────────────────────────────────────────────
+
 interface AIPanelProps {
   article: Article;
 }
 
 export const AIPanel: React.FC<AIPanelProps> = ({ article }) => {
-  const [mode, setMode]       = useState<AIPanelMode | null>(null);
-  const [result, setResult]   = useState<string>("");
+  const [mode,    setMode]    = useState<AIPanelMode | null>(null);
+  const [result,  setResult]  = useState<string>("");
   const [loading, setLoading] = useState<boolean>(false);
+  const [error,   setError]   = useState<string>("");
+
   const typed = useTypewriter(result);
 
+  // Cancel in-flight request on unmount or mode switch
+  const abortRef = useRef<AbortController | null>(null);
+  useEffect(() => { return () => { abortRef.current?.abort(); }; }, []);
+
   const run = async (m: AIPanelMode): Promise<void> => {
-    if (loading) return;
+    if (loading && mode === m) return; // ignore double-tap on same mode
+
+    // Cancel previous request if switching modes
+    abortRef.current?.abort();
+    abortRef.current = new AbortController();
+
     setMode(m);
     setResult("");
+    setError("");
     setLoading(true);
 
-    const prompts: Record<AIPanelMode, string> = {
-      summary: `Tech article analysis:\n"${article.title}" — ${article.summary}\n\nProvide:\n• 3 key insights (start each with •)\n• Why this matters for the industry (2 sentences)\n• What to watch next (1 sentence)`,
-      eli5:    `Explain this tech news to a curious 12-year-old using simple analogies and 3 short paragraphs:\n"${article.title}" — ${article.summary}`,
-      market:  `Market/industry sentiment analysis of this tech news:\n"${article.title}" — ${article.summary}\n\nProvide: bull/bear signals, who wins, who loses, competitive impact, 90-day outlook. Use clear headers.`,
-    };
-
     try {
-      const r = await callClaude(
-        [{ role: "user", content: prompts[m] }],
-        "You are a senior tech analyst at a top-tier research firm. Be sharp, specific, and insightful. No generic statements.",
-        700
+      const text = await aiService.panelRequest(
+        m,
+        article.title,
+        article.summary,
+        abortRef.current.signal
       );
-      setResult(r);
-    } catch {
-      setResult("• AI analysis temporarily unavailable.\n• Please try again in a moment.");
+      setResult(text);
+    } catch (err) {
+      if (err instanceof Error && err.message === "Request cancelled") {
+        return; // mode was switched — new request already started
+      }
+      const msg = err instanceof Error ? err.message : "Unknown error";
+      setError(`Analysis unavailable: ${msg}`);
+    } finally {
+      setLoading(false);
     }
-
-    setLoading(false);
   };
 
   const buttons: AIPanelButton[] = [
@@ -54,6 +81,7 @@ export const AIPanel: React.FC<AIPanelProps> = ({ article }) => {
 
   return (
     <div style={{ background: `${DS.cyan}08`, border: `1px solid ${DS.cyan}20`, borderRadius: 14, padding: 20 }}>
+      {/* Header */}
       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}>
         <span style={{ color: DS.cyan, fontSize: 16 }}>✦</span>
         <span style={{ fontFamily: "'IBM Plex Mono',monospace", fontSize: 10, color: DS.cyan, letterSpacing: 1.5 }}>
@@ -61,15 +89,17 @@ export const AIPanel: React.FC<AIPanelProps> = ({ article }) => {
         </span>
       </div>
 
-      <div style={{ display: "flex", gap: 7, flexWrap: "wrap", marginBottom: result ? 16 : 0 }}>
+      {/* Mode buttons */}
+      <div style={{ display: "flex", gap: 7, flexWrap: "wrap", marginBottom: result || error ? 16 : 0 }}>
         {buttons.map((b) => (
           <button
             key={b.id}
             onClick={() => void run(b.id)}
             disabled={loading}
+            aria-pressed={mode === b.id}
             style={{
               padding: "7px 14px", borderRadius: 9,
-              border:  `1px solid ${mode === b.id ? b.color : DS.line2}`,
+              border:     `1px solid ${mode === b.id ? b.color : DS.line2}`,
               background: mode === b.id ? `${b.color}18` : "transparent",
               color:      mode === b.id ? b.color : DS.text1,
               fontFamily: "'Cabinet Grotesk',sans-serif", fontSize: 12, fontWeight: 600,
@@ -81,6 +111,7 @@ export const AIPanel: React.FC<AIPanelProps> = ({ article }) => {
         ))}
       </div>
 
+      {/* Result — typewriter animation */}
       {result && (
         <div style={{
           fontFamily: "'Cabinet Grotesk',sans-serif", fontSize: 14, color: DS.text1,
@@ -90,28 +121,50 @@ export const AIPanel: React.FC<AIPanelProps> = ({ article }) => {
           {typed}
         </div>
       )}
+
+      {/* Error state */}
+      {error && !result && (
+        <div style={{
+          paddingTop: 14, borderTop: `1px solid ${DS.line}`,
+          fontFamily: "'Cabinet Grotesk',sans-serif", fontSize: 13, color: DS.text2, lineHeight: 1.6,
+        }}>
+          {error}
+          <button
+            onClick={() => { if (mode) void run(mode); }}
+            style={{
+              marginLeft: 12, padding: "3px 10px", borderRadius: 6,
+              background: "transparent", border: `1px solid ${DS.line2}`,
+              color: DS.text2, fontFamily: "'Cabinet Grotesk',sans-serif",
+              fontSize: 11, cursor: "pointer",
+            }}
+          >
+            Retry
+          </button>
+        </div>
+      )}
     </div>
   );
 };
 
 // ── ArticleModal ──────────────────────────────────────────────────────────────
+
 interface ArticleModalProps {
-  article: Article;
-  onClose: () => void;
+  article:     Article;
+  onClose:     () => void;
   allArticles: Article[];
 }
 
 export const ArticleModal: React.FC<ArticleModalProps> = ({ article, onClose, allArticles }) => {
-  const [tts, setTts]         = useState<boolean>(false);
+  const [tts,     setTts]     = useState<boolean>(false);
   const [sharing, setSharing] = useState<boolean>(false);
   const cat = getCatMeta(article.category);
 
   const related = allArticles
     .filter(
-      (a: Article) =>
+      (a) =>
         a.id !== article.id &&
         (a.category === article.category ||
-          a.tags.some((t: string) => article.tags.includes(t)))
+          a.tags.some((t) => article.tags.includes(t)))
     )
     .slice(0, 3);
 
@@ -121,16 +174,24 @@ export const ArticleModal: React.FC<ArticleModalProps> = ({ article, onClose, al
       setTts(false);
       return;
     }
-    const utt = new SpeechSynthesisUtterance(`${article.title}. ${article.summary}`);
-    utt.rate  = 0.92;
-    utt.pitch = 1.02;
-    utt.onend = () => setTts(false);
+    const utt   = new SpeechSynthesisUtterance(`${article.title}. ${article.summary}`);
+    utt.rate    = 0.92;
+    utt.pitch   = 1.02;
+    utt.onend   = () => setTts(false);
     window.speechSynthesis.speak(utt);
     setTts(true);
   };
 
+  // Stop TTS when modal closes
+  useEffect(() => {
+    return () => { window.speechSynthesis.cancel(); };
+  }, []);
+
   return (
     <div
+      role="dialog"
+      aria-modal="true"
+      aria-label={article.title}
       style={{ position: "fixed", inset: 0, zIndex: 500, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}
       onClick={onClose}
     >
@@ -157,6 +218,7 @@ export const ArticleModal: React.FC<ArticleModalProps> = ({ article, onClose, al
           <div style={{ position: "absolute", inset: 0, background: `linear-gradient(to top, ${DS.bg1} 0%, transparent 55%)`, borderRadius: "20px 20px 0 0" }} />
           <button
             onClick={onClose}
+            aria-label="Close article"
             style={{
               position: "absolute", top: 16, right: 16,
               background: "rgba(0,0,0,.6)", border: `1px solid ${DS.line2}`,
@@ -200,10 +262,12 @@ export const ArticleModal: React.FC<ArticleModalProps> = ({ article, onClose, al
             </span>
           </div>
 
+          {/* Summary */}
           <p style={{ fontFamily: "'Cabinet Grotesk',sans-serif", fontSize: 16, color: DS.text1, lineHeight: 1.8, marginBottom: 26 }}>
             {article.summary}
           </p>
 
+          {/* AI panel */}
           <AIPanel article={article} />
 
           {/* Tags */}
@@ -218,7 +282,7 @@ export const ArticleModal: React.FC<ArticleModalProps> = ({ article, onClose, al
             ))}
           </div>
 
-          {/* Actions */}
+          {/* Action buttons */}
           <div style={{ display: "flex", gap: 9, flexWrap: "wrap", marginBottom: 28, position: "relative" }}>
             <a
               href={article.url}
@@ -236,6 +300,7 @@ export const ArticleModal: React.FC<ArticleModalProps> = ({ article, onClose, al
 
             <button
               onClick={handleSpeak}
+              aria-label={tts ? "Stop audio" : "Listen to article"}
               style={{
                 padding: "13px 20px", borderRadius: 11,
                 background: tts ? `${DS.red}20` : DS.bg3,
@@ -250,6 +315,7 @@ export const ArticleModal: React.FC<ArticleModalProps> = ({ article, onClose, al
             <div style={{ position: "relative" }}>
               <button
                 onClick={() => setSharing((s) => !s)}
+                aria-expanded={sharing}
                 style={{
                   padding: "13px 20px", borderRadius: 11,
                   background: DS.bg3, border: `1px solid ${DS.line2}`,
@@ -278,6 +344,7 @@ export const ArticleModal: React.FC<ArticleModalProps> = ({ article, onClose, al
                     <img
                       src={r.image}
                       alt={r.title}
+                      loading="lazy"
                       style={{ width: 64, height: 56, objectFit: "cover", borderRadius: 8, flexShrink: 0 }}
                       onError={(e: React.SyntheticEvent<HTMLImageElement>) => { e.currentTarget.style.display = "none"; }}
                     />

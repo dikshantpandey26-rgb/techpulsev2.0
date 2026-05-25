@@ -1,4 +1,3 @@
-
 // =============================================================================
 // src/types/index.ts — Complete platform type system
 // =============================================================================
@@ -12,14 +11,14 @@ export type CategoryKey =
 
 export interface Article {
   id: number;
-  slug?: string;
+  slug: string;
   category: CategoryKey;
   title: string;
   summary: string;
   source: string;
   author: string;
   time: string;
-  publishedAt?: string;
+  publishedAt: string;
   readTime: string;
   views: string;
   sentiment: Sentiment;
