@@ -39,6 +39,8 @@ export const CAT_META: Record<CategoryKey, CatMeta> = {
   "Cloud & DevOps":{ color: "#38bdf8", emoji: "◻" },
   Science:         { color: "#a78bfa", emoji: "⬡" },
   Crypto:          { color: "#fbbf24", emoji: "◉" },
+  Web3:            { color: "#8B5CF6", emoji: "⛓️",},
+  Robotics:        { color: "#14B8A6", emoji: "🤖",},
 };
  
 export const FALLBACK_CAT: CatMeta = { color: "#f5a623", emoji: "◆" };
