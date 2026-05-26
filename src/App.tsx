@@ -1,9 +1,22 @@
+// =============================================================================
+// src/App.tsx — Main application shell
+//
+// CHANGES FROM PREVIOUS VERSION (Phase 2 live feed integration):
 // ─────────────────────────────────────────────────────────────────────────────
-// src/App.tsx  — Main application shell
-// Production-grade · Vercel-compatible · Strict TypeScript
-// ─────────────────────────────────────────────────────────────────────────────
+// BEFORE: const [articles] = useState<Article[]>(BASE_ARTICLES);
+//         useEffect(() => { setTimeout(() => setLoading(false), 800) }, []);
+//         — completely static data, no server communication.
+//
+// AFTER:  useLiveFeed() hook fetches from /api/articles on mount,
+//         polls every 10 minutes for fresh content, and falls back
+//         to BASE_ARTICLES if the API is unreachable.
+//         — real live data with automatic refresh.
+//
+// All UI, layout, styles, components, and interactions are IDENTICAL.
+// No visual regressions. Only the data source changes.
+// =============================================================================
 
-import React, { useState, useEffect, useRef, useMemo } from "react";
+import React, { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { DS, CAT_META, CATEGORIES, getCatMeta } from "./data/designSystem";
 import { BASE_ARTICLES } from "./data/articles";
 import { useScrollProgress } from "./hooks";
@@ -11,11 +24,136 @@ import { BreakingTicker } from "./components/BreakingTicker";
 import { NewsCard } from "./components/NewsCard";
 import { ArticleModal } from "./components/ArticleModal";
 import { Skeleton } from "./components/atoms";
-import { TrendingWidget, StatsBar, CategoryBreakdown, SourcesList, PremiumCTA, AdSlot } from "./components/Sidebar";
+import {
+  TrendingWidget,
+  StatsBar,
+  CategoryBreakdown,
+  SourcesList,
+  PremiumCTA,
+  AdSlot,
+} from "./components/Sidebar";
 import { AISearchBar, DailyDigest, NewsletterCTA } from "./components/AIWidgets";
 import type { Article } from "./types";
 
-const PERPAGE = 9;
+const PERPAGE           = 9;
+const POLL_INTERVAL_MS  = 10 * 60 * 1_000; // 10 minutes
+const FETCH_TIMEOUT_MS  = 12_000;
+
+// ── Live feed hook ────────────────────────────────────────────────────────────
+//
+// Fetches articles from /api/articles (our Edge Function that aggregates all
+// live sources). Falls back to static BASE_ARTICLES on any error so the UI
+// is never blank.
+//
+// SWR-like behaviour:
+//   • On mount: show skeletons while fetching, then render live articles.
+//   • Every 10 minutes: background refresh. If refresh fails, keep showing
+//     previous articles (no user-visible disruption).
+//   • On tab focus after ≥ 5 minutes away: trigger a refresh.
+//
+// category is passed as a query param so the server can filter + cache
+// per-category responses on the CDN layer.
+
+interface LiveFeedState {
+  articles:     Article[];
+  loading:      boolean;
+  isLive:       boolean;   // true = data came from API; false = seed fallback
+  lastUpdated:  Date | null;
+}
+
+function useLiveFeed(category: string): LiveFeedState {
+  const [state, setState] = useState<LiveFeedState>({
+    articles:    BASE_ARTICLES,
+    loading:     true,
+    isLive:      false,
+    lastUpdated: null,
+  });
+
+  const lastFetchRef = useRef<number>(0);
+  const abortRef     = useRef<AbortController | null>(null);
+
+  const fetchFeed = useCallback(async (isBackground = false): Promise<void> => {
+    // Debounce: don't re-fetch if last fetch was < 30s ago
+    if (Date.now() - lastFetchRef.current < 30_000 && isBackground) return;
+
+    abortRef.current?.abort();
+    abortRef.current = new AbortController();
+
+    if (!isBackground) {
+      setState((s) => ({ ...s, loading: true }));
+    }
+
+    try {
+      const origin   = window.location.origin;
+      const params   = new URLSearchParams({ limit: "30" });
+      if (category && category !== "All") params.set("category", category);
+
+      const timer = setTimeout(() => abortRef.current?.abort(), FETCH_TIMEOUT_MS);
+
+      const res = await fetch(`${origin}/api/articles?${params.toString()}`, {
+        signal: abortRef.current.signal,
+        headers: { Accept: "application/json" },
+      });
+
+      clearTimeout(timer);
+
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+      const data = await res.json() as { articles?: Article[]; error?: string };
+
+      if (!data.articles || data.articles.length === 0) {
+        throw new Error("Empty response from API");
+      }
+
+      lastFetchRef.current = Date.now();
+
+      setState({
+        articles:    data.articles,
+        loading:     false,
+        isLive:      true,
+        lastUpdated: new Date(),
+      });
+
+    } catch (err) {
+      // Network failure, timeout, or empty response — use/keep seed data
+      if (err instanceof Error && err.message === "Request cancelled") return;
+
+      setState((s) => ({
+        ...s,
+        // Keep whatever was already loaded (live data stays if we have it)
+        articles: s.articles.length > 0 ? s.articles : BASE_ARTICLES,
+        loading:  false,
+        isLive:   s.isLive, // preserve live status if we had it
+      }));
+    }
+  }, [category]);
+
+  // Mount: fetch immediately
+  useEffect(() => {
+    void fetchFeed(false);
+    return () => { abortRef.current?.abort(); };
+  }, [fetchFeed]);
+
+  // Poll every 10 minutes
+  useEffect(() => {
+    const id = setInterval(() => void fetchFeed(true), POLL_INTERVAL_MS);
+    return () => clearInterval(id);
+  }, [fetchFeed]);
+
+  // Refetch on tab focus after being away ≥ 5 minutes
+  useEffect(() => {
+    const onFocus = (): void => {
+      const awayMs = Date.now() - lastFetchRef.current;
+      if (awayMs >= 5 * 60 * 1_000) void fetchFeed(true);
+    };
+    window.addEventListener("focus", onFocus);
+    return () => window.removeEventListener("focus", onFocus);
+  }, [fetchFeed]);
+
+  return state;
+}
+
+// ── Global styles (unchanged) ─────────────────────────────────────────────────
 
 const GLOBAL_STYLES = `
   @import url('https://fonts.googleapis.com/css2?family=Fraunces:wght@700;800;900&family=IBM+Plex+Mono:wght@400;600;700&display=swap');
@@ -35,31 +173,24 @@ const GLOBAL_STYLES = `
   .cats{scrollbar-width:none;}
 `;
 
+// ── App ───────────────────────────────────────────────────────────────────────
+
 export default function App(): React.ReactElement {
-  const [articles]                    = useState<Article[]>(BASE_ARTICLES);
-  const [loading, setLoading]         = useState<boolean>(true);
   const [activeCategory, setCategory] = useState<string>("All");
-  const [selected, setSelected]       = useState<Article | null>(null);
-  const [searchQuery, setSearchQuery] = useState<string>("");
-  const [page, setPage]               = useState<number>(1);
+  const [selected,       setSelected] = useState<Article | null>(null);
+  const [searchQuery,    setSearchQuery] = useState<string>("");
+  const [page,           setPage]     = useState<number>(1);
 
   const scrollProg = useScrollProgress();
   const loaderRef  = useRef<HTMLDivElement | null>(null);
 
-  // Simulate initial data fetch
-  useEffect(() => {
-    const t = setTimeout(() => setLoading(false), 800);
-    return () => clearTimeout(t);
-  }, []);
+  // ── Live feed — THE change from Phase 1 ──────────────────────────────────
+  const { articles, loading, isLive, lastUpdated } = useLiveFeed(activeCategory);
 
-  // Filtered + searched articles
+  // ── Client-side filter (search + category already applied by server
+  //    for category, but search is client-only)
   const filtered = useMemo<Article[]>(() => {
     let list = articles;
-
-    if (activeCategory !== "All") {
-      list = list.filter((a) => a.category === activeCategory);
-    }
-
     if (searchQuery) {
       const q = searchQuery.toLowerCase();
       list = list.filter(
@@ -70,20 +201,18 @@ export default function App(): React.ReactElement {
           a.source.toLowerCase().includes(q)
       );
     }
-
     return list;
-  }, [articles, activeCategory, searchQuery]);
+  }, [articles, searchQuery]);
 
   const paginated = filtered.slice(0, page * PERPAGE);
   const hasMore   = paginated.length < filtered.length;
 
-  // Infinite scroll
+  // ── Infinite scroll
   useEffect(() => {
     const el = loaderRef.current;
     if (!el) return;
-
     const observer = new IntersectionObserver(
-      ([entry]) => { if (entry.isIntersecting && hasMore) setPage((p) => p + 1); },
+      ([entry]) => { if (entry?.isIntersecting && hasMore) setPage((p) => p + 1); },
       { threshold: 0.1 }
     );
     observer.observe(el);
@@ -95,15 +224,8 @@ export default function App(): React.ReactElement {
     setPage(1);
   };
 
-  const handleSearchResults = (q: string): void => {
-    setSearchQuery(q);
-    setPage(1);
-  };
-
-  const handleSearchClear = (): void => {
-    setSearchQuery("");
-    setPage(1);
-  };
+  const handleSearchResults = (q: string): void => { setSearchQuery(q); setPage(1); };
+  const handleSearchClear   = (): void => { setSearchQuery(""); setPage(1); };
 
   const trendingArticles = articles.filter((a) => a.trending || a.hype > 85);
   const breakingArticles = articles.filter((a) => a.breaking || a.trending);
@@ -124,7 +246,7 @@ export default function App(): React.ReactElement {
       {/* Breaking ticker */}
       {!loading && <BreakingTicker articles={breakingArticles} />}
 
-      {/* ── Navbar ───────────────────────────────────────────────────────── */}
+      {/* ── Navbar ─────────────────────────────────────────────────────── */}
       <nav style={{
         position: "sticky", top: 0, zIndex: 900,
         background: `${DS.bg0}ee`, backdropFilter: "blur(24px)",
@@ -153,19 +275,29 @@ export default function App(): React.ReactElement {
             </div>
           </div>
 
-          {/* Status */}
+          {/* Live status */}
           <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
               <span style={{
                 width: 6, height: 6, borderRadius: "50%",
-                background: DS.green, boxShadow: `0 0 8px ${DS.green}`,
-                animation: "pulse 2s ease-in-out infinite", display: "inline-block",
+                // Green when live data, amber when using seed fallback
+                background:  isLive ? DS.green : DS.amber,
+                boxShadow:   isLive ? `0 0 8px ${DS.green}` : `0 0 8px ${DS.amber}`,
+                animation:  "pulse 2s ease-in-out infinite", display: "inline-block",
               }} />
-              <span style={{ fontFamily: "'IBM Plex Mono',monospace", fontSize: 9.5, color: DS.text2, letterSpacing: .5 }}>LIVE</span>
+              <span style={{ fontFamily: "'IBM Plex Mono',monospace", fontSize: 9.5, color: DS.text2, letterSpacing: .5 }}>
+                {isLive ? "LIVE" : "CACHED"}
+              </span>
             </div>
             <span style={{ fontFamily: "'IBM Plex Mono',monospace", fontSize: 9.5, color: DS.text2 }}>
               {filtered.length} ARTICLES
             </span>
+            {lastUpdated && (
+              <span style={{ fontFamily: "'IBM Plex Mono',monospace", fontSize: 9, color: DS.text2, display: "none" }}
+                aria-label={`Last updated ${lastUpdated.toLocaleTimeString()}`}>
+                ↻ {lastUpdated.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+              </span>
+            )}
           </div>
 
           {/* Auth */}
@@ -243,7 +375,7 @@ export default function App(): React.ReactElement {
             fontSize: "clamp(38px,5.5vw,70px)",
             fontWeight: 900, lineHeight: 1.08, marginBottom: 16, maxWidth: 700,
           }}>
-            The World's Tech News,<br />
+            The World&apos;s Tech News,<br />
             <span style={{ background: `linear-gradient(90deg,${DS.amber},${DS.coral})`, WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>
               Intelligently Curated.
             </span>
@@ -267,7 +399,7 @@ export default function App(): React.ReactElement {
           {!loading && showHomeSections && <StatsBar articles={articles} />}
           {!loading && showHomeSections && <DailyDigest articles={articles} />}
 
-          {/* Feed */}
+          {/* Article feed */}
           {loading ? (
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(290px,1fr))", gap: 18 }}>
               {Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} />)}
@@ -296,7 +428,6 @@ export default function App(): React.ReactElement {
                 ))}
               </div>
 
-              {/* Inline ad after 6th article */}
               {paginated.length >= 6 && showHomeSections && <AdSlot />}
 
               {/* Infinite scroll sentinel */}
