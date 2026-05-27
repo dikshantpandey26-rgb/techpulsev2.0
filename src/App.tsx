@@ -33,7 +33,9 @@ import {
   AdSlot,
 } from "./components/Sidebar";
 import { AISearchBar, DailyDigest, NewsletterCTA } from "./components/AIWidgets";
+import { isCategoryMatch } from "./utils/categoryUtils";
 import type { Article } from "./types";
+import type { ArticleWithCoverage } from "./services/dedupEngine";
 
 const PERPAGE           = 9;
 const POLL_INTERVAL_MS  = 10 * 60 * 1_000; // 10 minutes
@@ -177,7 +179,7 @@ const GLOBAL_STYLES = `
 
 export default function App(): React.ReactElement {
   const [activeCategory, setCategory] = useState<string>("All");
-  const [selected,       setSelected] = useState<Article | null>(null);
+  const [selected,       setSelected] = useState<Article | ArticleWithCoverage | null>(null);
   const [searchQuery,    setSearchQuery] = useState<string>("");
   const [page,           setPage]     = useState<number>(1);
 
@@ -187,22 +189,28 @@ export default function App(): React.ReactElement {
   // ── Live feed — THE change from Phase 1 ──────────────────────────────────
   const { articles, loading, isLive, lastUpdated } = useLiveFeed(activeCategory);
 
-  // ── Client-side filter (search + category already applied by server
-  //    for category, but search is client-only)
+  // ── Client-side filter ────────────────────────────────────────────────────
+  // Category: strict equality via isCategoryMatch() — never .includes()
+  // Search:   title + tags + source only (NOT category field)
   const filtered = useMemo<Article[]>(() => {
     let list = articles;
+
+    if (activeCategory && activeCategory !== "All") {
+      list = list.filter((a) => isCategoryMatch(a.category, activeCategory));
+    }
+
     if (searchQuery) {
       const q = searchQuery.toLowerCase();
       list = list.filter(
         (a) =>
           a.title.toLowerCase().includes(q) ||
-          a.category.toLowerCase().includes(q) ||
           a.tags.some((t) => t.toLowerCase().includes(q)) ||
           a.source.toLowerCase().includes(q)
       );
     }
+
     return list;
-  }, [articles, searchQuery]);
+  }, [articles, activeCategory, searchQuery]);
 
   const paginated = filtered.slice(0, page * PERPAGE);
   const hasMore   = paginated.length < filtered.length;

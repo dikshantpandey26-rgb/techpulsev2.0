@@ -53,16 +53,31 @@ function normaliseSocialScore(raw: number): number {
 // ── Main scorer ───────────────────────────────────────────────────────────────
 
 export function computeTrendingScore(article: NormalizedArticle): number {
-  const recency    = recencyScore(article.publishedAt);
-  const hype       = scoreHype(`${article.title} ${article.summary}`);
-  const social     = normaliseSocialScore(article.engagementScore ?? 0);
-  const authority  = authorityMultiplier(article.sourceId) * 50; // maps [0.5,1.5] → [25, 75]
+  const recency   = recencyScore(article.publishedAt);
+  const hype      = scoreHype(`${article.title} ${article.summary}`);
+  const social    = normaliseSocialScore(article.engagementScore ?? 0);
+  const authority = authorityMultiplier(article.sourceId) * 50;
+
+  // Reliability bonus
+  const reliabilityBonus =
+    Math.min(5, (article.reliabilityScore - 0.70) * 25);
+
+  // Multi-source coverage bonus
+  const coverageBonus =
+    Math.min(10, ((article.coveredBy?.length ?? 1) - 1) * 2);
+
+  // Breaking news boost
+  const breakingBonus =
+    article.breaking ? 15 : 0;
 
   const raw = (
-    recency   * 0.35 +
-    hype      * 0.25 +
-    social    * 0.20 +
-    authority * 0.20
+    recency            * 0.33 +
+    hype               * 0.24 +
+    social             * 0.18 +
+    authority          * 0.20 +
+    reliabilityBonus +
+    coverageBonus +
+    breakingBonus
   );
 
   return Math.min(100, Math.round(raw));

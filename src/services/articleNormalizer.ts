@@ -48,6 +48,7 @@ import type {
 } from "../types";
 import { SOURCE_REGISTRY } from "./sourceRegistry";
 import { classifyArticle }  from "./categoryClassifier";
+import { canonicalCategory } from "../utils/categoryUtils";
 import { slugify, estimateReadTime, scoreHype, formatRelativeTime } from "../utils/articleUtils";
 
 // ── Category image fallbacks ──────────────────────────────────────────────────
@@ -241,19 +242,51 @@ export function normalizeItem(raw: RawFeedItem): NormalizedArticle {
     ? estimateReadTime(raw.description)
     : "2 min";
 
-  // ── Tags: merge source tags + AI-inferred category as tag
-  const tags = Array.from(
-    new Set([
-      ...raw.tags.map((t) => t.toLowerCase()),
-      classification.category.toLowerCase(),
-    ])
-  ).slice(0, 8);
+ // ── Canonical category normalization
+//
+// WHY:
+// Different sources/classifiers may output:
+//
+// "AI"
+// "Artificial Intelligence"
+// "Programming & Dev"
+// "DevOps"
+// "Cloud"
+// "Cyber Security"
+//
+// But the UI category system ONLY supports the exact CategoryKey union.
+//
+// canonicalCategory() maps all variants into a guaranteed valid category.
+//
+// Example:
+// "Artificial Intelligence" → "AI"
+// "DevOps"                  → "Cloud & DevOps"
+//
+// This fixes:
+// • category filter mismatch
+// • "All categories showing" bug
+// • invalid category rendering
+// • broken sidebar counts
+// • inconsistent dedup clustering
 
-  const article: NormalizedArticle = {
-    // Article base fields
-    id,
-    slug,
-    category:     classification.category,
+const normalizedCategory = canonicalCategory(
+  classification.category,
+  source.defaultCategory
+);
+
+// ── Tags: merge source tags + inferred category
+const tags = Array.from(
+  new Set([
+    ...raw.tags.map((t) => t.toLowerCase()),
+    normalizedCategory.toLowerCase(),
+  ])
+).slice(0, 8);
+
+const article: NormalizedArticle = {
+  // Article base fields
+  id,
+  slug,
+    category: normalizedCategory,
     title:        sanitiseText(raw.title),
     summary:      sanitiseText(raw.description) || sanitiseText(raw.title),
     source:       source.displayName,

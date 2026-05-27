@@ -46,8 +46,12 @@ import type { CacheEntry, CacheGetResult, CacheOptions } from "../types";
 // ── Storage ───────────────────────────────────────────────────────────────────
 
 // Module-level singletons — persist across warm invocations in the same isolate
-const store = new Map<string, CacheEntry<unknown>>();
+const store    = new Map<string, CacheEntry<unknown>>();
 const inFlight = new Map<string, Promise<unknown>>();
+
+// Hard cap on cache entries to prevent unbounded memory growth in long-lived
+// Edge Function isolates. When exceeded, we evict the 20% oldest entries.
+const MAX_STORE_SIZE = 500;
 
 // ── Internals ─────────────────────────────────────────────────────────────────
 
@@ -58,8 +62,23 @@ function now(): number {
 /** Remove entries that have passed their staleUntil deadline */
 function evictExpired(): void {
   const t = now();
+
+  // Pass 1: remove fully expired entries
   for (const [key, entry] of store) {
     if (t >= entry.staleUntil) {
+      store.delete(key);
+    }
+  }
+
+  // Pass 2: enforce memory cap
+  if (store.size > MAX_STORE_SIZE) {
+    const evictCount = Math.ceil(store.size * 0.2);
+
+    const oldestEntries = Array.from(store.entries())
+      .sort((a, b) => a[1].storedAt - b[1].storedAt)
+      .slice(0, evictCount);
+
+    for (const [key] of oldestEntries) {
       store.delete(key);
     }
   }

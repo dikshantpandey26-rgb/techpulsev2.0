@@ -23,6 +23,8 @@ import { aiService } from "../services/aiService";
 import { useTypewriter } from "../hooks";
 import { SentimentBadge, ShareMenu } from "./atoms";
 import type { Article, AIPanelMode, AIPanelButton } from "../types";
+import type { ArticleWithCoverage } from "../services/dedupEngine";
+import { SourceClusterPanel } from "./SourceCluster";
 
 // ── AIPanel ───────────────────────────────────────────────────────────────────
 
@@ -149,7 +151,7 @@ export const AIPanel: React.FC<AIPanelProps> = ({ article }) => {
 // ── ArticleModal ──────────────────────────────────────────────────────────────
 
 interface ArticleModalProps {
-  article:     Article;
+  article:     Article | ArticleWithCoverage;
   onClose:     () => void;
   allArticles: Article[];
 }
@@ -269,6 +271,11 @@ export const ArticleModal: React.FC<ArticleModalProps> = ({ article, onClose, al
 
           {/* AI panel */}
           <AIPanel article={article} />
+
+          {/* Source cluster — shown when multiple sources covered this story */}
+          {"coverageDetails" in article && article.coverageDetails?.length > 1 && (
+            <SourceClusterPanel coverageDetails={article.coverageDetails} />
+          )}
 
           {/* Tags */}
           <div style={{ display: "flex", gap: 7, flexWrap: "wrap", margin: "20px 0" }}>

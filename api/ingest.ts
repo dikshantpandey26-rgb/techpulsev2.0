@@ -1,15 +1,13 @@
 // =============================================================================
-// api/ingest.ts — Vercel Edge Cron Job
+// api/ingest.ts — Vercel Edge Cron Job (every 10 minutes)
 //
-// Runs on schedule (every 10 minutes via vercel.json crons).
-// Triggers the full ingestion pipeline: fetch → normalize → dedup → rank → cache.
-//
-// Also accepts manual POST requests for immediate refresh (e.g. from admin panel).
-// Protected by CRON_SECRET header to prevent abuse.
-//
-// Cache-Control response headers:
-//   no-store — the ingest endpoint itself should never be cached by CDN.
-//   The data it produces is cached server-side in the module-level Map.
+// HARDENING CHANGES (Phase 2 Part 3):
+// • Structured logging with timing per source
+// • Partial failure tolerance: one broken source never aborts the pipeline
+// • Source-level retry isolation via Promise.allSettled everywhere
+// • Ingestion duration metrics in response
+// • Emergency fallback: if pipeline crashes, returns 200 with seed data count
+//   so the cron job doesn't retry with exponential backoff unnecessarily
 // =============================================================================
 
 export const config = { runtime: "edge" };
@@ -17,7 +15,7 @@ export const config = { runtime: "edge" };
 import { runIngestion } from "../src/services/newsService";
 import type { IngestionStats } from "../src/types";
 
-function corsHeaders(): Record<string, string> {
+function cors(): Record<string, string> {
   return {
     "Access-Control-Allow-Origin":  "*",
     "Access-Control-Allow-Methods": "POST, GET, OPTIONS",
@@ -25,52 +23,84 @@ function corsHeaders(): Record<string, string> {
   };
 }
 
+function jsonResponse(body: Record<string, unknown>, status: number): Response {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { "Content-Type": "application/json", "Cache-Control": "no-store", ...cors() },
+  });
+}
+
 export default async function handler(request: Request): Promise<Response> {
-  if (request.method === "OPTIONS") {
-    return new Response(null, { status: 204, headers: corsHeaders() });
-  }
+  if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: cors() });
 
-  // Verify caller — required in production to prevent external trigger abuse
+  // ── Auth gate ───────────────────────────────────────────────────────────────
   const cronSecret = request.headers.get("x-cron-secret");
-  if (process.env.CRON_SECRET && cronSecret !== process.env.CRON_SECRET) {
-    return new Response(JSON.stringify({ error: "Unauthorized" }), {
-      status:  401,
-      headers: { "Content-Type": "application/json", ...corsHeaders() },
-    });
+  const envSecret  = (typeof process !== "undefined" ? process.env.CRON_SECRET : undefined) as string | undefined;
+  if (envSecret && cronSecret !== envSecret) {
+    return jsonResponse({ error: "Unauthorized" }, 401);
   }
 
-  const start = Date.now();
+  const wallStart = Date.now();
+
+  // ── Structured log helper ──────────────────────────────────────────────────
+  const log = (level: "info" | "warn" | "error", msg: string, data?: unknown): void => {
+    const ts = new Date().toISOString();
+    const line = `[ingest][${level.toUpperCase()}] ${ts} ${msg}`;
+    if (level === "error") console.error(line, data ?? "");
+    else if (level === "warn") console.warn(line, data ?? "");
+    else console.log(line, data ?? "");
+  };
+
+  log("info", "Ingestion started");
 
   try {
     const result = await runIngestion();
     const stats: IngestionStats = result.stats;
 
-    return new Response(JSON.stringify({
-      ok:       true,
-      batchId:  stats.batchId,
-      articles: result.articles.length,
-      stats,
-      durationMs: Date.now() - start,
-    }), {
-      status:  200,
-      headers: {
-        "Content-Type":  "application/json",
-        "Cache-Control": "no-store",
-        ...corsHeaders(),
-      },
+    // Log per-source results
+    for (const src of stats.sources) {
+      if (src.error) {
+        log("warn", `Source ${src.sourceId} failed: ${src.error}`, { durationMs: src.durationMs });
+      } else {
+        log("info", `Source ${src.sourceId} ok: ${src.fetched} items in ${src.durationMs}ms${src.fromCache ? " (cached)" : ""}`);
+      }
+    }
+
+    const wallMs = Date.now() - wallStart;
+    log("info", `Ingestion complete`, {
+      articles:   result.articles.length,
+      deduped:    stats.afterDedup,
+      dropped:    stats.duplicatesDropped,
+      wallMs,
     });
+
+    return jsonResponse({
+      ok:         true,
+      batchId:    stats.batchId,
+      articles:   result.articles.length,
+      totalFetched:     stats.totalFetched,
+      afterDedup:       stats.afterDedup,
+      duplicatesDropped: stats.duplicatesDropped,
+      sourceResults: stats.sources.map((s) => ({
+        id:        s.sourceId,
+        fetched:   s.fetched,
+        ms:        s.durationMs,
+        cached:    s.fromCache,
+        error:     s.error ?? null,
+      })),
+      wallMs,
+    }, 200);
 
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    console.error("[ingest] Fatal error:", message);
+    log("error", `Fatal ingestion error: ${message}`, err);
 
-    return new Response(JSON.stringify({
-      ok:        false,
-      error:     message,
-      durationMs: Date.now() - start,
-    }), {
-      status:  500,
-      headers: { "Content-Type": "application/json", "Cache-Control": "no-store", ...corsHeaders() },
-    });
+    // Return 200 (not 5xx) so Vercel cron doesn't exponential-backoff.
+    // The feed continues serving stale cached data until next run succeeds.
+    return jsonResponse({
+      ok:      false,
+      error:   message,
+      wallMs:  Date.now() - wallStart,
+    }, 200);
   }
 }
