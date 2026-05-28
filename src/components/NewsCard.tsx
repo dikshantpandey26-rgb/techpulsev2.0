@@ -8,7 +8,7 @@ import { useVisible } from "../hooks";
 import { SentimentBadge, ShareMenu } from "./atoms";
 import type { Article } from "../types";
 import type { ArticleWithCoverage } from "../services/dedupEngine";
-import { SourceClusterBadge } from "./SourceCluster";
+import { SourceClusterBadge, CompactCoverageBadge } from "./SourceCluster";
 
 export type CardVariant = "default" | "featured" | "compact";
 
@@ -202,15 +202,23 @@ export const NewsCard: React.FC<NewsCardProps> = ({
           </div>
         </div>
 
-        {/* Coverage badge — visible only when multiple sources covered this story */}
-        {"coveredByLabel" in article && article.coveredByLabel && (
-          <div style={{ marginTop: 10 }}>
+        {/* Coverage badge — compact for default/compact, full pill for featured */}
+        {"sourceCount" in article && (article.sourceCount ?? 0) > 1 && (
+          <div style={{ marginTop: 8 }}>
+          {featured ? (
             <SourceClusterBadge
               sourceCount={article.sourceCount ?? 0}
-              coveredByLabel={article.coveredByLabel}
-            />
-          </div>
-        )}
+                coveredByLabel={
+                (article as { coveredByLabel?: string }).coveredByLabel ?? ""
+                }
+              />
+        ) : (
+      <CompactCoverageBadge
+        sourceCount={article.sourceCount ?? 0}
+      />
+    )}
+  </div>
+)}
 
         {/* Tags */}
         <div style={{ display: "flex", gap: 5, marginTop: 8, flexWrap: "wrap" }}>

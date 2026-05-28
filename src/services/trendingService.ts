@@ -19,6 +19,7 @@
 // =============================================================================
 
 import type { NormalizedArticle } from "../types";
+import type { ArticleWithCoverage } from "./dedupEngine";
 import { authorityMultiplier } from "./sourceReliabilityService";
 import { scoreHype } from "../utils/articleUtils";
 
@@ -52,7 +53,9 @@ function normaliseSocialScore(raw: number): number {
 
 // ── Main scorer ───────────────────────────────────────────────────────────────
 
-export function computeTrendingScore(article: NormalizedArticle): number {
+export function computeTrendingScore(
+  article: NormalizedArticle | ArticleWithCoverage
+): number {
   const recency   = recencyScore(article.publishedAt);
   const hype      = scoreHype(`${article.title} ${article.summary}`);
   const social    = normaliseSocialScore(article.engagementScore ?? 0);
@@ -63,8 +66,17 @@ export function computeTrendingScore(article: NormalizedArticle): number {
     Math.min(5, (article.reliabilityScore - 0.70) * 25);
 
   // Multi-source coverage bonus
+  // Multi-source coverage bonus
+  // Only exists after deduplication enrichment
+  const coverageCount =
+  typeof (article as ArticleWithCoverage).coverageCount === "number"
+    ? (article as ArticleWithCoverage).coverageCount
+    : 1;
+
   const coverageBonus =
-    Math.min(10, ((article.coveredBy?.length ?? 1) - 1) * 2);
+  coverageCount > 1
+    ? Math.min(10, (coverageCount - 1) * 2)
+    : 0;
 
   // Breaking news boost
   const breakingBonus =

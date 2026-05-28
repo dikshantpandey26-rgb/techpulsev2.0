@@ -212,7 +212,14 @@ export default function App(): React.ReactElement {
     return list;
   }, [articles, activeCategory, searchQuery]);
 
-  const paginated = filtered.slice(0, page * PERPAGE);
+  // O(1) article lookup map — passed into ArticleModal for related article resolution.
+// useMemo so it only rebuilds when the articles array changes (not on every render).
+const articleMap = useMemo<Map<number, Article>>(
+  () => new Map(articles.map((a) => [a.id, a])),
+  [articles]
+);
+
+const paginated = filtered.slice(0, page * PERPAGE);
   const hasMore   = paginated.length < filtered.length;
 
   // ── Infinite scroll
@@ -226,6 +233,26 @@ export default function App(): React.ReactElement {
     observer.observe(el);
     return () => observer.disconnect();
   }, [hasMore]);
+
+  // Listen for "techpulse:open-article" events dispatched by ArticleModal
+// when user clicks a related article link inside the modal.
+// This avoids prop-drilling a callback 3 levels deep.
+useEffect(() => {
+  const handler = (e: Event): void => {
+    const detail = (e as CustomEvent<{ id: number }>).detail;
+    const target = articleMap.get(detail.id);
+
+    if (target) {
+      setSelected(target);
+    }
+  };
+
+  window.addEventListener("techpulse:open-article", handler);
+
+  return () => {
+    window.removeEventListener("techpulse:open-article", handler);
+  };
+}, [articleMap]);
 
   const handleCategoryChange = (cat: string): void => {
     setCategory(cat);

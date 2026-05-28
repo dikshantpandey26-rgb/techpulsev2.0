@@ -41,8 +41,9 @@ import type {
   } from "../types";
   import { BASE_ARTICLES }           from "../data/articles";
   import { normalizeItems }          from "./articleNormalizer";
-  import { deduplicateArticles }     from "./articleDedupService";
-  import { rankArticles }            from "./trendingService";
+  //import { deduplicateArticles }     from "./articleDedupService";
+  //import { rankArticles }            from "./trendingService";
+  import { processArticleBatch } from "./dedupEngine";
   import { feedCache }               from "./cacheService";
   import { fetchAllRss }             from "./rssService";
   import { fetchHackerNews }         from "./hackerNewsService";
@@ -125,14 +126,14 @@ import type {
     // ── Step 3: Normalise
     const normalised = normalizeItems(allRawItems);
   
-    // ── Step 4: Dedup
-    const { articles: deduped, dropped } = deduplicateArticles(normalised);
-  
-    // ── Step 5: Rank
-    const ranked = rankArticles(deduped);
-  
-    // ── Step 6: If pipeline produced nothing, use seed data
-    const articles = ranked.length > 0 ? ranked : seedArticles();
+    // ── Step 4 + 5: Dedup + annotate + rank
+    const processed = processArticleBatch(normalised);
+
+// ── Step 6: If pipeline produced nothing, use seed data
+    const articles =
+        processed.articles.length > 0
+          ? processed.articles
+          : seedArticles();
   
     // ── Step 7: Build stats
     const stats: IngestionStats = {
@@ -147,8 +148,8 @@ import type {
         error:      r.error,
       })),
       totalFetched:     allRawItems.length,
-      afterDedup:       deduped.length,
-      duplicatesDropped: dropped,
+      afterDedup: processed.articles.length,
+      duplicatesDropped: processed.stats.duplicatesDropped,
     };
   
     return { articles, stats, fromCache: false, stale: false };
