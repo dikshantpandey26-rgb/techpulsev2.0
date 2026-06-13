@@ -15,7 +15,7 @@
 //    Existing clients sending ?page=1&limit=9 continue working unchanged.
 //
 // 2. Stable deterministic sort on the server
-//    Order: trendingScore DESC → publishedAt DESC → id ASC
+//    Order: finalScore DESC → trendingScore DESC → publishedAt DESC → id ASC
 //    This is the ONLY place articles are sorted. Frontend never re-sorts.
 //    Identical sort on every request = stable cursors.
 //
@@ -92,19 +92,31 @@ function getOrCreateSnapshot(articles: NormalizedArticle[], version: number): Sn
 
 // ─────────────────────────────────────────────────────────────────────────────
 // STABLE SORT
-// trendingScore DESC → publishedAt DESC → id ASC
+//finalScore DESC → trendingScore DESC → publishedAt DESC → id ASC
 // The canonical ordering for this feed. Applied once on snapshot creation.
 // ─────────────────────────────────────────────────────────────────────────────
 
+interface SortableArticle extends NormalizedArticle {
+  finalScore?: number;
+}
+
 function stableSort(articles: NormalizedArticle[]): NormalizedArticle[] {
   return articles.slice().sort((a, b) => {
-    // 1. trendingScore DESC
-    const sd = b.trendingScore - a.trendingScore;
-    if (sd !== 0) return sd;
-    // 2. publishedAt DESC
-    const td = new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime();
-    if (td !== 0) return td;
-    // 3. id ASC (stable tiebreaker — never changes per article)
+    const articleA = a as SortableArticle;
+    const articleB = b as SortableArticle;
+
+    const scoreA = articleA.finalScore ?? articleA.trendingScore;
+    const scoreB = articleB.finalScore ?? articleB.trendingScore;
+
+    const scoreDiff = scoreB - scoreA;
+    if (scoreDiff !== 0) return scoreDiff;
+
+    const dateDiff =
+      new Date(b.publishedAt).getTime() -
+      new Date(a.publishedAt).getTime();
+
+    if (dateDiff !== 0) return dateDiff;
+
     return a.id - b.id;
   });
 }

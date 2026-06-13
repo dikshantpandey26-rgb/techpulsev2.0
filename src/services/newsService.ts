@@ -64,6 +64,8 @@ import {
   sourceFreshnessScore,
 } from "../utils/feedUtils";
 import { dbg } from "../utils/debugUtils";
+import { applyFeedIntelligence } from "./rankingEngine";
+import type { RankedArticle } from "./rankingEngine";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // TYPES
@@ -239,6 +241,16 @@ const {
   stats: dedupStats,
 } = processArticleBatch(normalised);
 
+const ranked: RankedArticle[] =
+processedArticles.length > 0
+    ? applyFeedIntelligence(processedArticles)
+    : [];
+
+const articles: NormalizedArticle[] =
+  ranked.length > 0
+    ? ranked
+    : seedArticles();
+
 const dedupDropped = dedupStats.duplicatesDropped;
 
 tDedup.end(
@@ -246,10 +258,10 @@ tDedup.end(
 );
 
   // ── Step 6: Fallback ───────────────────────────────────────────────────────
-  const articles: NormalizedArticle[] =
+  /*const articles: NormalizedArticle[] =
   processedArticles.length > 0
     ? processedArticles
-    : seedArticles();
+    : seedArticles();*/
 
   // ── Step 7: Build stats + meta ─────────────────────────────────────────────
   const totalDurationMs = Date.now() - batchStart;
