@@ -25,7 +25,8 @@ export interface SourceProfile {
 
 // ── Source profiles ───────────────────────────────────────────────────────────
 
-const PROFILES: Record<SourceId, SourceProfile> = {
+//const PROFILES: Record<SourceId, SourceProfile> = {
+const PROFILES: Partial<Record<SourceId, SourceProfile>> = {
   newsapi:          { reliabilityScore: 0.80, technicalDepth: 0.50, freshnessScore: 0.85, biasLevel: "center",        authority: 0 },
   gnews:            { reliabilityScore: 0.75, technicalDepth: 0.45, freshnessScore: 0.80, biasLevel: "center",        authority: 0 },
   hackernews:       { reliabilityScore: 0.85, technicalDepth: 0.90, freshnessScore: 0.90, biasLevel: "technical",     authority: 0 },
@@ -53,14 +54,29 @@ const PROFILES: Record<SourceId, SourceProfile> = {
 
 // Pre-compute authority scores (weighted composite)
 for (const id of Object.keys(PROFILES) as SourceId[]) {
-  const p = PROFILES[id];
-  p.authority = parseFloat(
-    (p.reliabilityScore * 0.5 + p.technicalDepth * 0.3 + p.freshnessScore * 0.2).toFixed(3)
+  const profile = PROFILES[id];
+
+  if (!profile) continue;
+
+  profile.authority = parseFloat(
+    (
+      profile.reliabilityScore * 0.5 +
+      profile.technicalDepth * 0.3 +
+      profile.freshnessScore * 0.2
+    ).toFixed(3)
   );
 }
 
+const DEFAULT_PROFILE: SourceProfile = {
+  reliabilityScore: 0.75,
+  technicalDepth: 0.70,
+  freshnessScore: 0.80,
+  biasLevel: "center",
+  authority: 0.70,
+};
+
 export function getSourceProfile(id: SourceId): SourceProfile {
-  return PROFILES[id];
+  return PROFILES[id] ?? DEFAULT_PROFILE;
 }
 
 /**

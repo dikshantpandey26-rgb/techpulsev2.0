@@ -249,29 +249,116 @@ export interface NormalizedArticle extends Article {
  * This union is the single source of truth for source identity across the app.
  */
 export type SourceId =
+  // Aggregation APIs
   | "newsapi"
   | "gnews"
+
+  // Community
   | "hackernews"
   | "reddit"
   | "devto"
   | "github-trending"
   | "producthunt"
+
+  // Tier-1 Tech Publications
   | "techcrunch"
   | "theverge"
   | "ars-technica"
   | "wired"
   | "bloomberg-tech"
-  | "coindesk"
-  | "android-authority"
-  | "macrumors"
-  | "appleinsider"
-  | "space-com"
+  | "venturebeat"
+  | "zdnet"
+  | "engadget"
+  | "cnet"
+  | "mit-tech-review"
+
+  // AI Sources
   | "openai-blog"
   | "anthropic-blog"
   | "google-ai-blog"
   | "meta-engineering"
   | "microsoft-ai"
-  | "seed";              // fallback source ID for static mock data
+  | "deepmind-blog"
+  | "huggingface-blog"
+  | "nvidia-ai-blog"
+  | "stability-ai-blog"
+
+  // Startups
+  | "yc-blog"
+  | "sifted"
+  | "first-round-review"
+
+  // Cybersecurity
+  | "krebs-on-security"
+  | "bleeping-computer"
+  | "dark-reading"
+  | "the-hacker-news-sec"
+  | "security-week"
+
+  // Programming
+  | "infoq"
+  | "stackoverflow-blog"
+  | "github-blog"
+  | "netflix-tech-blog"
+  | "martin-fowler"
+
+  // Cloud & DevOps
+  | "aws-blog"
+  | "google-cloud-blog"
+  | "azure-blog"
+  | "hashicorp-blog"
+  | "cncf-blog"
+  | "docker-blog"
+
+  // Apple
+  | "macrumors"
+  | "appleinsider"
+  | "9to5mac"
+  | "apple-newsroom"
+
+  // Android
+  | "android-authority"
+  | "android-developers-blog"
+  | "9to5google"
+
+  // Gaming
+  | "ign"
+  | "pc-gamer"
+  | "polygon"
+  | "eurogamer"
+
+  // Space
+  | "space-com"
+  | "nasa-news"
+  | "spacenews"
+  | "planetary-society"
+
+  // Science
+  | "science-daily"
+  | "phys-org"
+  | "new-scientist"
+  | "nature-news"
+
+  // Crypto
+  | "coindesk"
+  | "cointelegraph"
+  | "the-block"
+  | "decrypt-co"
+
+  // Web3
+  | "ethereum-blog"
+  | "polygon-blog"
+
+  // Robotics
+  | "ieee-robotics"
+  | "robot-report"
+
+  // Gadgets
+  | "gsmarena-news"
+  | "rtings-news"
+
+  // Misc / Fallback
+  | "seed";
 
 /** Ingestion transport mechanism used to fetch a source */
 export type SourceTransport = "rss" | "json-api" | "html-scrape" | "static";
@@ -290,6 +377,10 @@ export interface SourceConfig {
   maxArticlesPerFetch: number;        // cap to avoid flooding the feed
   cacheTtlSeconds:  number;           // how long to cache results from this source
   enabled:          boolean;          // toggle without code change
+  freshnessWeight?: number;
+  thumbnailQuality?: "high" | "medium" | "low" | "none";
+  categoryStrength?: number;
+  averageDailyVolume?: number;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
